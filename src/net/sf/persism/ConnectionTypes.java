@@ -1,32 +1,31 @@
 package net.sf.persism;
 
-enum ConnectionTypes {
-    Oracle("%", "\"", "\""),
-    MSSQL(null, "[", "]"),
-    JTDS(null, "[", "]"),
-    Derby(null, "\"", "\""),
-    H2(null, "\"", "\""),
-    MySQL(null, "`", "`"),
-    PostgreSQL(null, "\"", "\""),
-    SQLite(null, "[", "]"),
-    Firebird(null, "\"", "\""),
-    HSQLDB(null, "", ""),
-    Other(null, "", "")
-    ;
+public enum ConnectionTypes {
+	Oracle("%", "\"", "\""),
+	MSSQL(null, "[", "]"),
+	JTDS(null, "[", "]"),
+	Derby(null, "\"", "\""),
+	H2(null, "\"", "\""),
+	MySQL(null, "`", "`"),
+	PostgreSQL(null, "\"", "\""),
+	SQLite(null, "[", "]"),
+	Firebird(null, "\"", "\""),
+	HSQLDB(null, "", ""),
+	Other(null, "", "");
 
-    private String schemaPattern;
-    private String keywordStartDelimiter;
-    private String keywordEndDelimiter;
+	private final String schemaPattern;
+	private final String keywordStartDelimiter;
+	private final String keywordEndDelimiter;
 
-    ConnectionTypes(String schemaPattern, String keywordStartDelimiter, String keywordEndDelimiter) {
-        this.schemaPattern = schemaPattern;
-        this.keywordStartDelimiter = keywordStartDelimiter;
-        this.keywordEndDelimiter = keywordEndDelimiter;
-    }
+	ConnectionTypes(String schemaPattern, String keywordStartDelimiter, String keywordEndDelimiter) {
+		this.schemaPattern = schemaPattern;
+		this.keywordStartDelimiter = keywordStartDelimiter;
+		this.keywordEndDelimiter = keywordEndDelimiter;
+	}
 
-    public static ConnectionTypes get(String connectionUrl) {
-        if (connectionUrl == null) {
-            return null;
+	public static ConnectionTypes get(String connectionUrl) {
+		if (connectionUrl == null) {
+			return null;
         }
 
         if (connectionUrl.startsWith("jdbc:h2")) {

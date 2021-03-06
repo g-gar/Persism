@@ -2,11 +2,8 @@ package net.sf.persism;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
-import java.sql.Blob;
-import java.sql.Clob;
-import java.sql.Time;
-import java.sql.Timestamp;
-import java.time.LocalTime;
+import java.sql.*;
+import java.time.*;
 import java.util.UUID;
 
 /**
@@ -15,46 +12,46 @@ import java.util.UUID;
  * @author Dan Howard
  * @since 10/8/11 5:36 PM
  */
-enum Types {
+public enum Types {
 
-    booleanType(boolean.class),
-    BooleanType(Boolean.class),
-    byteType(byte.class),
-    ByteType(Byte.class),
-    shortType(short.class),
-    ShortType(Short.class),
-    integerType(int.class),
-    IntegerType(Integer.class),
-    longType(long.class),
+	booleanType(boolean.class),
+	BooleanType(Boolean.class),
+	byteType(byte.class),
+	ByteType(Byte.class),
+	shortType(short.class),
+	ShortType(Short.class),
+	integerType(int.class),
+	IntegerType(Integer.class),
+	longType(long.class),
     LongType(Long.class),
-    floatType(float.class),
-    FloatType(Float.class),
-    doubleType(double.class),
-    DoubleType(Double.class),
-    BigDecimalType(BigDecimal.class),
-    BigIntegerType(BigInteger.class),
-    StringType(String.class),
-    characterType(char.class),
-    CharacterType(Character.class),
-    UtilDateType(java.util.Date.class),
-    SQLDateType(java.sql.Date.class),
-    TimeType(Time.class),
-    LocalTimeType(LocalTime.class),
-    TimestampType(Timestamp.class),
-    LocalDateType(java.time.LocalDate.class),
-    LocalDateTimeType(java.time.LocalDateTime.class),
-    InstantType(java.time.Instant.class),
-    OffsetDateTimeType(java.time.OffsetDateTime.class),
-    ZonedDateTimeType(java.time.ZonedDateTime.class),
-    byteArrayType(byte[].class),
-    ByteArrayType(Byte[].class),
-    ClobType(Clob.class),
-    BlobType(Blob.class),
-    EnumType(Enum.class),
-    UUIDType(UUID.class),
-    ObjectType(Object.class);
+	floatType(float.class),
+	FloatType(Float.class),
+	doubleType(double.class),
+	DoubleType(Double.class),
+	BigDecimalType(BigDecimal.class),
+	BigIntegerType(BigInteger.class),
+	StringType(String.class),
+	characterType(char.class),
+	CharacterType(Character.class),
+	UtilDateType(java.util.Date.class),
+	SQLDateType(Date.class),
+	TimeType(Time.class),
+	LocalTimeType(LocalTime.class),
+	TimestampType(Timestamp.class),
+	LocalDateType(LocalDate.class),
+	LocalDateTimeType(LocalDateTime.class),
+	InstantType(Instant.class),
+	OffsetDateTimeType(OffsetDateTime.class),
+	ZonedDateTimeType(ZonedDateTime.class),
+	byteArrayType(byte[].class),
+	ByteArrayType(Byte[].class),
+	ClobType(Clob.class),
+	BlobType(Blob.class),
+	EnumType(Enum.class),
+	UUIDType(UUID.class),
+	ObjectType(Object.class);
 
-    private static final Log log = Log.getLogger(Types.class);
+	private static final Log log = Log.getLogger(Types.class);
 
     private Class type;
 

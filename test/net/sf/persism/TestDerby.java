@@ -1,17 +1,16 @@
 package net.sf.persism;
 
-import net.sf.persism.dao.Contact;
 import net.sf.persism.dao.Customer;
 import net.sf.persism.dao.DAOFactory;
 import net.sf.persism.dao.Order;
 
 import java.sql.*;
-import java.sql.Date;
-import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.LocalTime;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
 
 /**
  * Comments for TestDerby go here.
@@ -217,26 +216,25 @@ public final class TestDerby extends BaseTest {
             session.insert(customer);
 
 
-            session.fetch(customer);
+			session.fetch(customer);
 
-            Map<String, ColumnInfo> columns = session.getMetaData().getColumns(Customer.class, con);
-            for (ColumnInfo columnInfo : columns.values()) {
-                log.info(columnInfo);
-                assertNotNull("type should not be null", columnInfo.columnType);
-            }
+			Map<String, ColumnInfo> columns = session.getMetaData().getColumns(Customer.class, con);
+			for (ColumnInfo columnInfo : columns.values()) {
+				log.info(columnInfo);
+				assertNotNull("type should not be null", columnInfo.getColumnType());
+			}
 
-            Order order = DAOFactory.newOrder(con);
-            ;
-            order.setCustomerId("123");
-            order.setName("name");
-            order.setCreated(LocalDate.now());
-            order.setDatePaid(LocalDateTime.now());
-            order.setPaid(true);
+			Order order = DAOFactory.newOrder(con);
+			order.setCustomerId("123");
+			order.setName("name");
+			order.setCreated(LocalDate.now());
+			order.setDatePaid(LocalDateTime.now());
+			order.setPaid(true);
 
-            session.insert(order);
-            log.info("BEFORE " + order.getDatePaid());
-            session.fetch(order);
-            log.info("AFTER " + order.getDatePaid());
+			session.insert(order);
+			log.info("BEFORE " + order.getDatePaid());
+			session.fetch(order);
+			log.info("AFTER " + order.getDatePaid());
 
             log.info("ORDER:" + order);
             Order order2 = DAOFactory.newOrder(con);
@@ -251,15 +249,15 @@ public final class TestDerby extends BaseTest {
 
             columns = session.getMetaData().getColumns(Order.class, con);
             for (ColumnInfo columnInfo : columns.values()) {
-                log.info(columnInfo);
-                assertNotNull("type should not be null", columnInfo.columnType);
+				log.info(columnInfo);
+				assertNotNull("type should not be null", columnInfo.getColumnType());
             }
 
             // look at meta data columsn
             columns = session.getMetaData().getColumns(Order.class, con);
             for (ColumnInfo columnInfo : columns.values()) {
-                log.info(columnInfo);
-                assertNotNull("type should not be null", columnInfo.columnType);
+				log.info(columnInfo);
+				assertNotNull("type should not be null", columnInfo.getColumnType());
             }
 
 

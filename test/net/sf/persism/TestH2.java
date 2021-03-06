@@ -8,10 +8,11 @@ import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.sql.*;
 import java.text.NumberFormat;
-import java.time.*;
-import java.time.format.DateTimeFormatter;
-import java.util.*;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.Date;
+import java.util.*;
 
 /**
  * Comments for TestH2 go here.
@@ -301,7 +302,7 @@ public final class TestH2 extends BaseTest {
         customer.setContactName("fred flintstone");
         customer.setContactTitle("Lord");
         customer.setCountry("US");
-        customer.setDateRegistered(new java.sql.Timestamp(System.currentTimeMillis()));
+        customer.setDateRegistered(new Timestamp(System.currentTimeMillis()));
         customer.setFax("123-456-7890");
         customer.setPhone("456-678-1234");
         customer.setPostalCode("54321");
@@ -368,7 +369,7 @@ public final class TestH2 extends BaseTest {
     // ResultSetMetaData can't determine types if there is no result? where 1=0 ?
     public void testTypes() {
         Statement st = null;
-        java.sql.ResultSet rs = null;
+        ResultSet rs = null;
 
         try {
 
@@ -395,7 +396,7 @@ public final class TestH2 extends BaseTest {
             Map<String, ColumnInfo> columns = session.getMetaData().getColumns(Customer.class, con);
             for (ColumnInfo columnInfo : columns.values()) {
                 log.info(columnInfo);
-                assertNotNull("type should not be null", columnInfo.columnType);
+                assertNotNull("type should not be null", columnInfo.getColumnType());
             }
 
             Order order = DAOFactory.newOrder(con);
@@ -428,7 +429,7 @@ public final class TestH2 extends BaseTest {
             columns = session.getMetaData().getColumns(Order.class, con);
             for (ColumnInfo columnInfo : columns.values()) {
                 log.info(columnInfo);
-                assertNotNull("type should not be null", columnInfo.columnType);
+                assertNotNull("type should not be null", columnInfo.getColumnType());
             }
 
         } catch (SQLException e) {
@@ -443,7 +444,7 @@ public final class TestH2 extends BaseTest {
     public void testDatabaseMetaData() {
 
         Statement st = null;
-        java.sql.ResultSet rs = null;
+        ResultSet rs = null;
 
         DatabaseMetaData dmd = null;
         try {
@@ -513,7 +514,7 @@ public final class TestH2 extends BaseTest {
 
     public void testColumnDef() {
 
-        java.sql.ResultSet rs = null;
+        ResultSet rs = null;
         Statement st = null;
 
         try {

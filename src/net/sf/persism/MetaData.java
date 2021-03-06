@@ -1,12 +1,11 @@
 package net.sf.persism;
 
 import net.sf.persism.annotations.Column;
-import net.sf.persism.annotations.NotColumn;
 import net.sf.persism.annotations.Table;
+import net.sf.persism.command.DeterminePropertyInfo;
+import net.sf.persism.command.GetConnectionType;
+import net.sf.persism.model.ColumnInfoBuilder;
 
-import java.lang.annotation.Annotation;
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
 import java.sql.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -27,17 +26,17 @@ final class MetaData {
     private static final Map<Class, Collection<PropertyInfo>> propertyMap = new ConcurrentHashMap<>(32);
 
     // column to property map for each class
-    private Map<Class, Map<String, PropertyInfo>> propertyInfoMap = new ConcurrentHashMap<Class, Map<String, PropertyInfo>>(32);
-    private Map<Class, Map<String, ColumnInfo>> columnInfoMap = new ConcurrentHashMap<Class, Map<String, ColumnInfo>>(32);
+    private final Map<Class, Map<String, PropertyInfo>> propertyInfoMap = new ConcurrentHashMap<Class, Map<String, PropertyInfo>>(32);
+    private final Map<Class, Map<String, ColumnInfo>> columnInfoMap = new ConcurrentHashMap<Class, Map<String, ColumnInfo>>(32);
 
     // table name for each class
-    private Map<Class, String> tableMap = new ConcurrentHashMap<Class, String>(32);
+    private final Map<Class, String> tableMap = new ConcurrentHashMap<Class, String>(32);
 
     // SQL for updates/inserts/deletes/selects for each class
-    private Map<Class, String> updateStatementsMap = new ConcurrentHashMap<Class, String>(32);
-    private Map<Class, String> insertStatementsMap = new ConcurrentHashMap<Class, String>(32);
-    private Map<Class, String> deleteStatementsMap = new ConcurrentHashMap<Class, String>(32);
-    private Map<Class, String> selectStatementsMap = new ConcurrentHashMap<Class, String>(32);
+    private final Map<Class, String> updateStatementsMap = new ConcurrentHashMap<Class, String>(32);
+    private final Map<Class, String> insertStatementsMap = new ConcurrentHashMap<Class, String>(32);
+    private final Map<Class, String> deleteStatementsMap = new ConcurrentHashMap<Class, String>(32);
+    private final Map<Class, String> selectStatementsMap = new ConcurrentHashMap<Class, String>(32);
 
     // Key is SQL with named params, Value is SQL with ?
     // private Map<String, String> sqlWitNamedParams = new ConcurrentHashMap<String, String>(32);
@@ -48,7 +47,7 @@ final class MetaData {
     // private Map<Class, List<String>> primaryKeysMap = new ConcurrentHashMap<Class, List<String>>(32); // remove later maybe?
 
     // list of tables in the DB
-    private Set<String> tableNames = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
+    private final Set<String> tableNames = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
 
     // Map of table names + meta data
     // private Map<String, TableInfo> tableInfoMap = new ConcurrentHashMap<String, TableInfo>(32);
@@ -58,13 +57,13 @@ final class MetaData {
     ConnectionTypes connectionType;
 
     //the "extra" characters that can be used in unquoted identifier names (those beyond a-z, A-Z, 0-9 and _)
-    private String extraNameCharacters;
+    private final String extraNameCharacters;
 
     private MetaData(Connection con) throws SQLException {
 
         log.debug("MetaData CREATING instance [" + this + "] ");
 
-        connectionType = ConnectionTypes.get(con.getMetaData().getURL());
+        connectionType = GetConnectionType.execute(con);
         if (connectionType == ConnectionTypes.Other) {
             log.warn("Unknown connection type. Please contact Persism to add support for " + con.getMetaData().getDatabaseProductName());
         }
@@ -84,6 +83,15 @@ final class MetaData {
         return metaData.get(url);
     }
 
+    private static synchronized <T> Collection<PropertyInfo> determinePropertyInfo(Class<T> objectClass) {
+        if (propertyMap.containsKey(objectClass)) {
+            return propertyMap.get(objectClass);
+        }
+        Collection<PropertyInfo> properties = DeterminePropertyInfo.execute(objectClass);
+        propertyMap.put(objectClass, properties);
+        return properties;
+    }
+
     // Should only be called IF the map does not contain the column meta information yet.
     // Version for Tables
     private synchronized <T> Map<String, PropertyInfo> determinePropertyInfo(Class<T> objectClass, String tableName, Connection connection) {
@@ -92,81 +100,32 @@ final class MetaData {
             return propertyInfoMap.get(objectClass);
         }
 
-        String sd = connectionType.getKeywordStartDelimiter();
-        String ed = connectionType.getKeywordEndDelimiter();
-
-        ResultSet rs = null;
-        Statement st = null;
-        try {
-            st = connection.createStatement();
-            // gives us real column names with case.
-            String sql = new StringBuilder().append("SELECT * FROM ").append(sd).append(tableName).append(ed).append(" WHERE 1=0").toString();
-            if (log.isDebugEnabled()) {
-                log.debug("determineColumns: " + sql);
-            }
-            rs = st.executeQuery(sql);
-            return determinePropertyInfo(objectClass, rs);
-        } catch (SQLException e) {
-            throw new PersismException(e.getMessage(), e);
-        } finally {
-            cleanup(st, rs);
-        }
+        return DeterminePropertyInfo.execute(objectClass, tableName, connection);
     }
 
     // Should only be called IF the map does not contain the column meta information yet.
     // Version for Queries
+//    TODO: TEST
     private synchronized <T> Map<String, PropertyInfo> determinePropertyInfo(Class<T> objectClass, ResultSet rs) {
         // double check map - note this could be called with a Query were we never have that in here
         if (propertyInfoMap.containsKey(objectClass)) {
             return propertyInfoMap.get(objectClass);
         }
-
+        Map<String, PropertyInfo> result = null;
         try {
-            ResultSetMetaData rsmd = rs.getMetaData();
-            Collection<PropertyInfo> properties = getPropertyInfo(objectClass);
-
-            int columnCount = rsmd.getColumnCount();
-            Map<String, PropertyInfo> columns = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
-            for (int j = 1; j <= columnCount; j++) {
-                String realColumnName = rsmd.getColumnLabel(j);
-                String columnName = realColumnName.toLowerCase().replace("_", "").replace(" ", "");
-                if (extraNameCharacters != null && !extraNameCharacters.isEmpty()) {
-                    // also replace these characters
-                    for (int x = 0; x < extraNameCharacters.length(); x++) {
-                        columnName = columnName.replace("" + extraNameCharacters.charAt(x), "");
-                    }
-                }
-                PropertyInfo foundProperty = null;
-                for (PropertyInfo propertyInfo : properties) {
-                    String propertyName = propertyInfo.propertyName.toLowerCase().replace("_", "");
-                    if (propertyName.equalsIgnoreCase(columnName)) {
-                        foundProperty = propertyInfo;
-                        break;
-                    } else {
-                        // check annotation against column name
-                        Annotation annotation = propertyInfo.getAnnotation(Column.class);
-                        if (annotation != null) {
-                            if (((Column) annotation).name().equalsIgnoreCase(realColumnName)) {
-                                foundProperty = propertyInfo;
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                if (foundProperty != null) {
-                    columns.put(realColumnName, foundProperty);
-                } else {
-                    log.warn("Property not found for column: " + realColumnName + " class: " + objectClass);
-                }
-            }
-
-            propertyInfoMap.put(objectClass, columns);
-            return columns;
-
+            result = DeterminePropertyInfo.execute(objectClass, extraNameCharacters, rs);
+            propertyInfoMap.put(objectClass, result);
         } catch (SQLException e) {
             throw new PersismException(e.getMessage(), e);
         }
+        return result;
+    }
+
+    static <T> Collection<PropertyInfo> getPropertyInfo(Class<T> objectClass) {
+        if (propertyMap.containsKey(objectClass)) {
+            return propertyMap.get(objectClass);
+        }
+        return determinePropertyInfo(objectClass);
     }
 
     private synchronized <T> Map<String, ColumnInfo> determineColumnInfo(Class<T> objectClass, String tableName, Connection connection) {
@@ -183,57 +142,48 @@ final class MetaData {
         try {
 
             st = connection.createStatement();
-            rs = st.executeQuery("SELECT * FROM " + sd + tableName + ed + " WHERE 1=0");
-
+            rs = st.executeQuery(String.format("SELECT  * FROM %s%s%s WHERE 1=0", sd, tableName, ed));
             // Make sure primary keys sorted by column order in case we have more than 1
             // then we'll know the order to apply the parameters.
             Map<String, ColumnInfo> map = new LinkedHashMap<>(32);
 
-            boolean primaryKeyFound = false;
+            st = connection.createStatement();
+            rs = st.executeQuery("SELECT * FROM " + sd + tableName + ed + " WHERE 1=0");
 
-            // Grab all columns and make first pass to detect primary auto-inc
-            ResultSetMetaData rsMetaData = rs.getMetaData();
-            for (int i = 1; i <= rsMetaData.getColumnCount(); i++) {
-                // only include columns where we have a property
-                if (properties.containsKey(rsMetaData.getColumnLabel(i))) {
-                    ColumnInfo columnInfo = new ColumnInfo();
-                    columnInfo.columnName = rsMetaData.getColumnLabel(i);
-                    columnInfo.autoIncrement = rsMetaData.isAutoIncrement(i);
-                    columnInfo.primary = columnInfo.autoIncrement;
-                    columnInfo.sqlColumnType = rsMetaData.getColumnType(i);
-                    columnInfo.sqlColumnTypeName = rsMetaData.getColumnTypeName(i);
-                    columnInfo.columnType = Types.convert(columnInfo.sqlColumnType);
-                    columnInfo.length = rsMetaData.getColumnDisplaySize(i);
+            // Make sure primary keys sorted by column order in case we have more than 1
+            // then we'll know the order to apply the parameters.
+            map = new LinkedHashMap<>(32);
 
-                    if (!primaryKeyFound) {
-                        primaryKeyFound = columnInfo.primary;
-                    }
+            ResultSetMetaData rsmd = rs.getMetaData();
+            ColumnInfoBuilder builder;
+            PropertyInfo propertyInfo;
+            Column columnAnnotation;
+            Types columnType;
+            for (int i = 1; i <= rsmd.getColumnCount(); i++) {
+                if (properties.containsKey(rsmd.getColumnLabel(i))) {
+                    columnType = Types.convert(rsmd.getColumnType(i));
+                    builder = new ColumnInfoBuilder()
+                        .columnName(rsmd.getColumnLabel(i))
+                        .autoIncrement(rsmd.isAutoIncrement(i))
+                        .primary(rsmd.isAutoIncrement(i))
+                        .sqlColumnType(rsmd.getColumnType(i))
+                        .sqlColumnTypeName(rsmd.getColumnTypeName(i))
+                        .columnType(columnType)
+                        .length(rsmd.getColumnDisplaySize(i));
 
-                    PropertyInfo propertyInfo = properties.get(rsMetaData.getColumnLabel(i));
-                    Annotation annotation = propertyInfo.getAnnotation(Column.class);
-                    if (annotation != null) {
-                        if (((Column) annotation).hasDefault()) {
-                            columnInfo.hasDefault = true;
-                        }
+                    propertyInfo = properties.get(rsmd.getColumnLabel(i));
+                    if (propertyInfo.getAnnotations().containsKey(Column.class)) {
+                        columnAnnotation = propertyInfo.getAnnotation(Column.class);
+                        builder.hasDefault(columnAnnotation.hasDefault())
+                            .primary(columnAnnotation.primary())
+                            .autoIncrement(columnAnnotation.autoIncrement() && columnType.isCountable());
 
-                        if (((Column) annotation).primary()) {
-                            columnInfo.primary = true;
-                        }
-
-                        if (((Column) annotation).autoIncrement()) {
-                            columnInfo.autoIncrement = true;
-                            if (!columnInfo.columnType.isCountable()) {
-                                columnInfo.autoIncrement = false;
-                                log.warn("Column " + columnInfo.columnName + " is annotated as auto-increment but is a non-numeric type (" + columnInfo.columnType + ") - Ignoring.");
-                            }
-                        }
-
-                        if (!primaryKeyFound) {
-                            primaryKeyFound = columnInfo.primary;
+                        if (columnAnnotation.autoIncrement() && !columnType.isCountable()) {
+                            log.warn(String.format("Column %s is annotated as auto-increment but is a non-numeric type (%s) - Ignoring.", rsmd.getColumnLabel(i), columnType));
                         }
                     }
 
-                    map.put(columnInfo.columnName, columnInfo);
+                    map.put(rsmd.getColumnLabel(i), builder.build());
                 }
             }
             rs.close();
@@ -246,52 +196,54 @@ final class MetaData {
              */
             rs = dmd.getColumns(null, connectionType.getSchemaPattern(), tableName, null);
             while (rs.next()) {
-                ColumnInfo columnInfo = map.get(rs.getString("COLUMN_NAME"));
-                if (columnInfo != null) {
-                    if (!columnInfo.hasDefault) {
-                        columnInfo.hasDefault = containsColumn(rs, "COLUMN_DEF") && rs.getString("COLUMN_DEF") != null;
-                    }
+                String columnName = rs.getString("COLUMN_NAME");
+                ColumnInfo columnInfo = map.get(columnName);
 
+                if (columnInfo != null) {
+                    builder = new ColumnInfoBuilder(map.get(columnName));
+                    if (!builder.isHasDefault()) {
+                        builder.hasDefault(containsColumn(rs, "COLUMN_DEF") && rs.getString("COLUMN_DEF") != null);
+                    }
                     // Do we not have autoinc info here? Yes.
                     // IS_AUTOINCREMENT = NO or YES
-                    if (!columnInfo.autoIncrement) {
-                        columnInfo.autoIncrement = containsColumn(rs, "IS_AUTOINCREMENT") && "YES".equalsIgnoreCase(rs.getString("IS_AUTOINCREMENT"));
+                    if (!builder.isAutoIncrement()) {
+                        builder.autoIncrement(containsColumn(rs, "IS_AUTOINCREMENT") && "YES".equalsIgnoreCase(rs.getString("IS_AUTOINCREMENT")));
                     }
-
                     // Re-assert the type since older version of SQLite could not detect types with empty resultsets
                     // It seems OK now in the newer JDBC driver.
                     // See testTypes unit test in TestSQLite
                     if (containsColumn(rs, "DATA_TYPE")) {
-                        columnInfo.sqlColumnType = rs.getInt("DATA_TYPE");
+                        builder.sqlColumnType(rs.getInt("DATA_TYPE"));
                         if (containsColumn(rs, "TYPE_NAME")) {
-                            columnInfo.sqlColumnTypeName = rs.getString("TYPE_NAME");
+                            builder.sqlColumnTypeName(rs.getString("TYPE_NAME"));
                         }
-                        columnInfo.columnType = Types.convert(columnInfo.sqlColumnType);
+                        builder.columnType(Types.convert(builder.getSqlColumnType()));
                     }
+                    map.put(columnName, builder.build());
                 }
             }
             rs.close();
 
             // Iterate primary keys and update column infos
             rs = dmd.getPrimaryKeys(null, connectionType.getSchemaPattern(), tableName);
+            int pkCount = 0;
             while (rs.next()) {
                 ColumnInfo columnInfo = map.get(rs.getString("COLUMN_NAME"));
                 if (columnInfo != null) {
-                    columnInfo.primary = true;
-
-                    if (!primaryKeyFound) {
-                        primaryKeyFound = columnInfo.primary;
-                    }
+                    builder = new ColumnInfoBuilder(columnInfo)
+                        .primary(true);
+                    map.put(columnInfo.getColumnName(), builder.build());
+                    pkCount++;
                 }
             }
 
-            if (!primaryKeyFound) {
+            if (pkCount == 0) {
                 // Should we fail-fast? Actually no, we should not fail here.
                 // It's very possible the user has a table that they will never
                 // update, delete or select (by primary).
                 // They may only want to do read operations with specified queries and in that
                 // context we don't need any primary keys. (same with insert)
-                log.warn("No primary key found for table " + tableName + ". Do not use with update/delete/fetch or add a primary key.");
+                log.warn(String.format("No primary key found for table %s. Do not use with update/delete/fetch or add a primary key.", tableName));
             }
 
             columnInfoMap.put(objectClass, map);
@@ -303,88 +255,6 @@ final class MetaData {
         } finally {
             cleanup(st, rs);
         }
-    }
-
-    static <T> Collection<PropertyInfo> getPropertyInfo(Class<T> objectClass) {
-        if (propertyMap.containsKey(objectClass)) {
-            return propertyMap.get(objectClass);
-        }
-        return determinePropertyInfo(objectClass);
-    }
-
-    private static synchronized <T> Collection<PropertyInfo> determinePropertyInfo(Class<T> objectClass) {
-        if (propertyMap.containsKey(objectClass)) {
-            return propertyMap.get(objectClass);
-        }
-
-        Map<String, PropertyInfo> propertyNames = new HashMap<>(32);
-
-        Method[] methods = objectClass.getMethods();
-        for (Method method : methods) {
-            String methodName = method.getName();
-            if (methodName.startsWith("set")) {
-                String propertyName = methodName.substring(3).toLowerCase();
-
-                PropertyInfo propertyInfo = propertyNames.get(propertyName);
-                if (propertyInfo == null) {
-                    propertyInfo = new PropertyInfo();
-                    propertyNames.put(propertyName, propertyInfo);
-                }
-                propertyInfo.setter = method;
-                propertyInfo.propertyName = propertyName;
-
-                Annotation[] annotations = method.getAnnotations();
-                for (Annotation annotation : annotations) {
-                    propertyInfo.annotations.put(annotation.annotationType(), annotation);
-                }
-            }
-
-            if (methodName.startsWith("is") || methodName.startsWith("get") && !"getClass".equalsIgnoreCase(methodName)) {
-                int index = 3;
-                if (methodName.startsWith("is")) {
-                    index = 2;
-                }
-                String propertyName = methodName.substring(index).toLowerCase();
-
-                PropertyInfo propertyInfo = propertyNames.get(propertyName);
-                if (propertyInfo == null) {
-                    propertyInfo = new PropertyInfo();
-                    propertyNames.put(propertyName, propertyInfo);
-                }
-                propertyInfo.getter = method;
-                propertyInfo.propertyName = propertyName;
-                Annotation[] annotations = method.getAnnotations();
-                for (Annotation annotation : annotations) {
-                    propertyInfo.annotations.put(annotation.annotationType(), annotation);
-                }
-            }
-        }
-
-        Field[] fields = objectClass.getDeclaredFields();
-        for (Field field : fields) {
-            PropertyInfo propertyInfo = propertyNames.get(field.getName().toLowerCase());
-            if (propertyInfo != null) {
-                // Add the field annotations
-                Annotation[] annotations = field.getAnnotations();
-                for (Annotation annotation : annotations) {
-                    propertyInfo.annotations.put(annotation.annotationType(), annotation);
-                }
-            }
-        }
-
-        // Remove any properties found with the NoColumn annotation OR ones missing a setter (meaning they are calculated properties)
-        // http://stackoverflow.com/questions/2026104/hashmap-keyset-foreach-and-remove
-        Iterator<Map.Entry<String, PropertyInfo>> it = propertyNames.entrySet().iterator();
-        while (it.hasNext()) {
-            Map.Entry<String, PropertyInfo> entry = it.next();
-            PropertyInfo info = entry.getValue();
-            if (info.getAnnotation(NotColumn.class) != null || info.setter == null) {
-                it.remove();
-            }
-        }
-        Collection<PropertyInfo> properties = propertyNames.values();
-        propertyMap.put(objectClass, properties);
-        return Collections.unmodifiableCollection(properties);
     }
 
 
@@ -473,6 +343,7 @@ final class MetaData {
         return determineInsertStatement(object, connection);
     }
 
+    //    TODO
     private synchronized String determineInsertStatement(Object object, Connection connection) {
         if (insertStatementsMap.containsKey(object.getClass())) {
             return insertStatementsMap.get(object.getClass());
@@ -491,32 +362,32 @@ final class MetaData {
             boolean saveInMap = true;
 
             for (ColumnInfo column : columns.values()) {
-                if (!column.autoIncrement) {
+                if (!column.isAutoIncrement()) {
 
-                    if (column.hasDefault) {
+                    if (column.isHasDefault()) {
 
                         saveInMap = false;
 
                         // Do not include if this column has a default and no value has been
                         // set on it's associated property.
-                        if (properties.get(column.columnName).getter.invoke(object) == null) {
+                        if (properties.get(column.getColumnName()).getGetter().invoke(object) == null) {
                             continue;
                         }
 
                     }
-                    sb.append(sep).append(sd).append(column.columnName).append(ed);
+                    sb.append(sep).append(sd).append(column.getColumnName()).append(ed);
                     sep = ", ";
                 }
             }
             sb.append(") VALUES (");
             sep = "";
             for (ColumnInfo column : columns.values()) {
-                if (!column.autoIncrement) {
+                if (!column.isAutoIncrement()) {
 
-                    if (column.hasDefault) {
+                    if (column.isHasDefault()) {
                         // Do not include if this column has a default and no value has been
                         // set on it's associated property.
-                        if (properties.get(column.columnName).getter.invoke(object) == null) {
+                        if (properties.get(column.getColumnName()).getGetter().invoke(object) == null) {
                             continue;
                         }
                     }
@@ -614,7 +485,7 @@ final class MetaData {
         Map<String, ColumnInfo> columns = getColumns(object.getClass(), connection);
         for (String column : columns.keySet()) {
             ColumnInfo columnInfo = columns.get(column);
-            sb.append(sep).append(sd).append(columnInfo.columnName).append(ed);
+            sb.append(sep).append(sd).append(columnInfo.getColumnName()).append(ed);
             sep = ", ";
         }
         sb.append(" FROM ").append(sd).append(tableName).append(ed).append(" WHERE ");
@@ -653,7 +524,7 @@ final class MetaData {
         while (it.hasNext()) {
             String column = it.next();
             ColumnInfo columnInfo = columns.get(column);
-            if (!columnInfo.autoIncrement && !columnInfo.primary) {
+            if (!columnInfo.isAutoIncrement() && !columnInfo.isPrimary()) {
                 sb.append(sep).append(sd).append(column).append(ed).append(" = ?");
                 sep = ", ";
             }
@@ -685,8 +556,8 @@ final class MetaData {
 
                     Object newValue = null;
                     Object orgValue = null;
-                    newValue = propertyInfo.getter.invoke(persistable);
-                    orgValue = propertyInfo.getter.invoke(original);
+                    newValue = propertyInfo.getGetter().invoke(persistable);
+                    orgValue = propertyInfo.getGetter().invoke(original);
 
                     if (newValue != null && !newValue.equals(orgValue) || orgValue != null && !orgValue.equals(newValue)) {
                         changedColumns.put(column, propertyInfo);
@@ -831,8 +702,8 @@ final class MetaData {
         List<String> primaryKeys = new ArrayList<>(4);
         Map<String, ColumnInfo> map = getColumns(objectClass, connection);
         for (ColumnInfo col : map.values()) {
-            if (col.primary) {
-                primaryKeys.add(col.columnName);
+            if (col.isPrimary()) {
+                primaryKeys.add(col.getColumnName());
             }
         }
         if (log.isDebugEnabled()) {
