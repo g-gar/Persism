@@ -1,15 +1,10 @@
 package net.sf.persism;
 
-import java.io.IOException;
-import java.io.InputStream;
-import java.math.BigDecimal;
-import java.net.URL;
 import java.nio.ByteBuffer;
-import java.sql.*;
+import java.sql.Connection;
 import java.sql.ResultSet;
-import java.util.Arrays;
-import java.util.Date;
-import java.util.Properties;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.UUID;
 
 /**
@@ -18,7 +13,7 @@ import java.util.UUID;
  * @author Dan Howard
  * @since 4/1/12 6:48 AM
  */
-final class Util {
+public final class Util {
 
     private static final Log log = Log.getLogger(Util.class);
 
@@ -37,29 +32,17 @@ final class Util {
 
     }
 
-    static void cleanup(Statement st, ResultSet rs) {
-        try {
-            if (rs != null) {
-                rs.close();
-            }
-        } catch (SQLException e) {
-            log.error(e.getMessage(), e);
-        }
-        try {
-            if (st != null) {
-                st.close();
-            }
-        } catch (SQLException e) {
-            log.error(e.getMessage(), e);
-        }
+    public static void cleanup(Statement st, ResultSet rs) {
+        cleanup(st);
+        cleanup(rs);
     }
 
-    static void cleanup(ResultSet rs) {
+    public static void cleanup(AutoCloseable ac) {
         try {
-            if (rs != null) {
-                rs.close();
+            if (ac != null) {
+                ac.close();
             }
-        } catch (SQLException e) {
+        } catch (Exception e) {
             log.error(e.getMessage(), e);
         }
     }

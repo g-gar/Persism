@@ -7,12 +7,17 @@ package net.sf.persism;
  * Time: 11:08 AM
  */
 
-import net.sf.persism.dao.*;
+import net.sf.persism.dao.Customer;
+import net.sf.persism.dao.DAOFactory;
+import net.sf.persism.dao.Order;
+import net.sf.persism.dao.TableNoPrimary;
 
 import java.sql.*;
-import java.sql.Date;
 import java.time.*;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
 
 import static net.sf.persism.UtilsForTests.*;
 
@@ -313,8 +318,8 @@ public final class TestSQLite extends BaseTest {
         assertTrue("should not have initialized customer objects because the query missed some properties", notInitialized);
 
 
-        customer.setCustomerId("MOO");
-        customer.setDateRegistered(new java.sql.Timestamp(System.currentTimeMillis()));
+		customer.setCustomerId("MOO");
+		customer.setDateRegistered(new Timestamp(System.currentTimeMillis()));
 
         log.info(customer.getDateRegistered());
         session.update(customer);
@@ -356,8 +361,8 @@ public final class TestSQLite extends BaseTest {
 
         String insertStatement = "INSERT INTO Customers (Customer_ID, Contact_Name) VALUES ( ?, ? ) ";
 
-        PreparedStatement st = null;
-        java.sql.ResultSet rs = null;
+		PreparedStatement st = null;
+		ResultSet rs = null;
         try {
             String[] keyArray = {"Date_Registered"};
             st = con.prepareStatement(insertStatement, keyArray);
@@ -383,8 +388,8 @@ public final class TestSQLite extends BaseTest {
 
     public void testMetaData() {
 
-        Statement st = null;
-        java.sql.ResultSet rs = null;
+		Statement st = null;
+		ResultSet rs = null;
         try {
             st = con.createStatement();
             rs = st.executeQuery("select * FROM CUSTOMERS where 1=0");
@@ -444,8 +449,8 @@ public final class TestSQLite extends BaseTest {
             // look at meta data columns
             Map<String, ColumnInfo> columns = session.getMetaData().getColumns(Customer.class, con);
             for (ColumnInfo columnInfo : columns.values()) {
-                log.info(columnInfo);
-                assertNotNull("type should not be null", columnInfo.columnType);
+				log.info(columnInfo);
+				assertNotNull("type should not be null", columnInfo.getColumnType());
             }
 
             Order order = DAOFactory.newOrder(con);
@@ -460,8 +465,8 @@ public final class TestSQLite extends BaseTest {
             // look at meta data columns
             columns = session.getMetaData().getColumns(Order.class, con);
             for (ColumnInfo columnInfo : columns.values()) {
-                log.info(columnInfo);
-                assertNotNull("type should not be null", columnInfo.columnType);
+				log.info(columnInfo);
+				assertNotNull("type should not be null", columnInfo.getColumnType());
             }
 
 
@@ -551,8 +556,8 @@ public final class TestSQLite extends BaseTest {
 
     public void testColumnDefaults() {
 
-        java.sql.ResultSet rs = null;
-        Statement st = null;
+		ResultSet rs = null;
+		Statement st = null;
 
         try {
             st = con.createStatement();

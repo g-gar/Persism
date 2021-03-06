@@ -5,13 +5,14 @@ import net.sf.persism.dao.*;
 
 import java.lang.reflect.InvocationTargetException;
 import java.sql.*;
-import java.sql.Date;
-import java.sql.ResultSet;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 /**
  * Comments for BaseTest go here.
@@ -105,104 +106,8 @@ public abstract class BaseTest extends TestCase {
     }
 
 
-    public void testRefreshObject() {
-
-        try {
-            log.info("testRefreshObject with : " + con.getMetaData().getURL());
-
-            Customer customer1 = new Customer();
-            customer1.setCompanyName("TEST");
-            customer1.setCustomerId("MOO");
-            customer1.setAddress("123 sesame street");
-            customer1.setCity("city");
-            customer1.setContactName("fred flintstone");
-            customer1.setContactTitle("Lord");
-            customer1.setCountry("US");
-            customer1.setDateRegistered(new java.sql.Timestamp(System.currentTimeMillis()));
-            customer1.setFax("123-456-7890");
-            customer1.setPhone("456-678-1234");
-            customer1.setPostalCode("54321");
-            //customer1.setRegion(Regions.East);
-            customer1.setStatus('2');
-
-            session.delete(customer1); // in case it's already there.
-            session.insert(customer1);
-
-            String id = customer1.getCustomerId();
-
-            Customer customer2 = new Customer();
-            customer2.setCustomerId(id);
-            session.fetch(customer2);
-
-            assertNotNull("cust should be found ", customer2);
-
-            long dateRegistered = customer1.getDateRegistered().getTime();
-
-            customer1.setCountry("CA");
-            customer1.setDateRegistered(null);
-
-            assertEquals("Customer 1 country should be CA ", "CA", customer1.getCountry());
-            assertEquals("Customer 1 date registered should be null", null, customer1.getDateRegistered());
-
-
-            session.fetch(customer1);
-
-            assertEquals("Customer 1 country should be US ", "US", customer1.getCountry());
-            // we cannot test long. Need to format a date and compare as string to the seconds or minutes because SQL does not store dates with exact accuracy
-            log.info(new Date(dateRegistered) + " = ? " + new Date(customer1.getDateRegistered().getTime()));
-            assertEquals("Customer 1 date registered should be more or less equal since SQL can be off by 7 millis.?", "" + new Date(dateRegistered), "" + new Date(customer1.getDateRegistered().getTime()));
-        } catch (SQLException e) {
-            log.error(e.getMessage(), e);
-            fail(e.getMessage());
-        }
-
-    }
-
-    public void testQueryWithSpecificColumnsWhereCaseDoesNotMatch() throws SQLException {
-
-        log.info("testQueryWithSpecificColumnsWhereCaseDoesNotMatch with : " + con.getMetaData().getURL());
-
-        Customer customer = new Customer();
-        customer.setCompanyName("TEST");
-        customer.setCustomerId("MOO");
-        customer.setAddress("123 sesame street");
-        customer.setCity("city");
-        customer.setContactName("fred flintstone");
-        customer.setContactTitle("Lord");
-        customer.setCountry("US");
-        customer.setDateRegistered(new java.sql.Timestamp(System.currentTimeMillis()));
-        customer.setFax("123-456-7890");
-        customer.setPhone("456-678-1234");
-        customer.setPostalCode("54321");
-        customer.setRegion(Regions.East);
-        customer.setStatus('1');
-
-        session.delete(customer); // i case it already exists.
-        session.insert(customer);
-
-        customer.setRegion(Regions.North);
-        session.update(customer);
-
-        boolean failOnMissingProperties = false;
-
-        try {
-            session.query(Customer.class, "SELECT Country, PHONE from CUSTOMERS");
-        } catch (Exception e) {
-            log.error(e.getMessage(), e);
-            assertTrue("message should contain 'Customer was not properly initialized'", e.getMessage().contains("Customer was not properly initialized"));
-            failOnMissingProperties = true;
-        }
-        assertTrue("Should not be able to read fields if there are missing properties", failOnMissingProperties);
-
-        // Make sure all columns are NOT the CASE of the ones in the DB.
-        List<Customer> list = session.query(Customer.class, "SELECT company_NAME, Date_Of_Last_ORDER, contact_title, pHone, rEGion, postal_CODE, FAX, DATE_Registered, ADDress, CUStomer_id, Contact_name, country, city, STATUS, TestLocalDate, TestLocalDateTime from CUSTOMERS");
-
-        log.info(list);
-        assertEquals("list should be 1", 1, list.size());
-
-        Customer c2 = list.get(0);
-        assertEquals("region s/b north ", Regions.North, c2.getRegion());
-    }
+    static Timestamp ts = new Timestamp(udate.getTime());
+    static Time time = new Time(udate.getTime());
 
     public void testQueryResult() throws Exception {
 
@@ -287,75 +192,56 @@ public abstract class BaseTest extends TestCase {
 
     }
 
+    public void testRefreshObject() {
 
-    public void testReadPrimitive() throws SQLException {
-
-        Customer customer = new Customer();
-        customer.setCompanyName("TEST");
-        customer.setCustomerId("MOO");
-        customer.setAddress("123 sesame street");
-        customer.setCity("city");
-        customer.setContactName("fred flintstone");
-        customer.setContactTitle("Lord");
-        customer.setCountry("US");
-        customer.setDateRegistered(new java.sql.Timestamp(System.currentTimeMillis()));
-        customer.setFax("123-456-7890");
-        customer.setPhone("456-678-1234");
-        customer.setPostalCode("54321");
-        customer.setRegion(Regions.East);
-        customer.setStatus('2');
-
-
-        session.delete(customer); // in case it already exists.
-        session.insert(customer);
-
-        List<String> list = session.query(String.class, "SELECT Country from CUSTOMERS");
-
-
-        Order order;
-        order = DAOFactory.newOrder(con);
-        order.setCustomerId("MOO");
-        order.setName("ORDER 1");
-        //order.setCreated(new java.sql.Date(System.currentTimeMillis()));
-        order.setPaid(true);
-        session.insert(order);
-
-        assertTrue("order # > 0", order.getId() > 0);
-        assertNotNull("order created date should be defaulted", order.getCreated());
-
-
-        assertEquals("list should have 1", 1, list.size());
-        assertEquals("String should be US", "US", list.get(0));
-
-        String countryString = session.fetch(String.class, "SELECT Country from CUSTOMERS");
-        assertEquals("String should be US", "US", countryString);
-
-        countryString = "NOT US";
-        countryString = session.fetch(String.class, "SELECT Country from CUSTOMERS");
-        assertEquals("String should be US", "US", countryString);
-
-        List<Date> dates = session.query(Date.class, "select Date_Registered from Customers ");
-        log.info(dates);
-
-        Date dt = session.fetch(Date.class, "select Date_Registered from Customers ");
-        log.info(dt);
-
-        // Fails because there is no way to instantiate java.sql.Date - no default constructor.
-        List<java.sql.Date> sdates = session.query(java.sql.Date.class, "select Date_Registered from Customers ");
-        log.info(sdates);
-
-        java.sql.Date sdt = session.fetch(java.sql.Date.class, "select Date_Registered from Customers ");
-        log.info(sdt);
-
-        // this should fail. We can't do simple read on a primitive
-        boolean failed = false;
         try {
-            session.fetch(countryString);
-        } catch (PersismException e) {
-            failed = true;
-            assertEquals("message s/b 'Cannot read a primitive type object with this method.'", "Cannot read a primitive type object with this method.", e.getMessage());
+            log.info("testRefreshObject with : " + con.getMetaData().getURL());
+
+            Customer customer1 = new Customer();
+            customer1.setCompanyName("TEST");
+            customer1.setCustomerId("MOO");
+            customer1.setAddress("123 sesame street");
+            customer1.setCity("city");
+            customer1.setContactName("fred flintstone");
+            customer1.setContactTitle("Lord");
+            customer1.setCountry("US");
+            customer1.setDateRegistered(new Timestamp(System.currentTimeMillis()));
+            customer1.setFax("123-456-7890");
+            customer1.setPhone("456-678-1234");
+            customer1.setPostalCode("54321");
+            //customer1.setRegion(Regions.East);
+            customer1.setStatus('2');
+
+            session.delete(customer1); // in case it's already there.
+            session.insert(customer1);
+
+            String id = customer1.getCustomerId();
+
+            Customer customer2 = new Customer();
+            customer2.setCustomerId(id);
+            session.fetch(customer2);
+
+            assertNotNull("cust should be found ", customer2);
+
+            long dateRegistered = customer1.getDateRegistered().getTime();
+
+            customer1.setCountry("CA");
+            customer1.setDateRegistered(null);
+
+            assertEquals("Customer 1 country should be CA ", "CA", customer1.getCountry());
+            assertEquals("Customer 1 date registered should be null", null, customer1.getDateRegistered());
+
+
+            session.fetch(customer1);
+
+            assertEquals("Customer 1 country should be US ", "US", customer1.getCountry());
+            // we cannot test long. Need to format a date and compare as string to the seconds or minutes because SQL does not store dates with exact accuracy
+            log.info(new Date(dateRegistered) + " = ? " + new Date(customer1.getDateRegistered().getTime()));
+            assertEquals("Customer 1 date registered should be more or less equal since SQL can be off by 7 millis.?", "" + new Date(dateRegistered), "" + new Date(customer1.getDateRegistered().getTime()));
+        } catch (SQLException e) {
+            log.error(e.getMessage(), e);
+            fail(e.getMessage());
         }
-        assertTrue("should have thrown the exception", failed);
 
     }
 
@@ -455,8 +341,123 @@ public abstract class BaseTest extends TestCase {
     static LocalTime lt2 = LocalTime.parse("22:23:41.107", DateTimeFormatter.ISO_TIME); // later on the day SQLite sees LONG FFS
     static java.util.Date udate = new java.util.Date(Timestamp.valueOf("1992-02-17 22:23:41.107").getTime());
     static java.sql.Date sdate = new java.sql.Date(udate.getTime());
-    static java.sql.Timestamp ts = new Timestamp(udate.getTime());
-    static java.sql.Time time = new Time(udate.getTime());
+
+    public void testQueryWithSpecificColumnsWhereCaseDoesNotMatch() throws SQLException {
+
+        log.info("testQueryWithSpecificColumnsWhereCaseDoesNotMatch with : " + con.getMetaData().getURL());
+
+        Customer customer = new Customer();
+        customer.setCompanyName("TEST");
+        customer.setCustomerId("MOO");
+        customer.setAddress("123 sesame street");
+        customer.setCity("city");
+        customer.setContactName("fred flintstone");
+        customer.setContactTitle("Lord");
+        customer.setCountry("US");
+        customer.setDateRegistered(new Timestamp(System.currentTimeMillis()));
+        customer.setFax("123-456-7890");
+        customer.setPhone("456-678-1234");
+        customer.setPostalCode("54321");
+        customer.setRegion(Regions.East);
+        customer.setStatus('1');
+
+        session.delete(customer); // i case it already exists.
+        session.insert(customer);
+
+        customer.setRegion(Regions.North);
+        session.update(customer);
+
+        boolean failOnMissingProperties = false;
+
+        try {
+            session.query(Customer.class, "SELECT Country, PHONE from CUSTOMERS");
+        } catch (Exception e) {
+            log.error(e.getMessage(), e);
+            assertTrue("message should contain 'Customer was not properly initialized'", e.getMessage().contains("Customer was not properly initialized"));
+            failOnMissingProperties = true;
+        }
+        assertTrue("Should not be able to read fields if there are missing properties", failOnMissingProperties);
+
+        // Make sure all columns are NOT the CASE of the ones in the DB.
+        List<Customer> list = session.query(Customer.class, "SELECT company_NAME, Date_Of_Last_ORDER, contact_title, pHone, rEGion, postal_CODE, FAX, DATE_Registered, ADDress, CUStomer_id, Contact_name, country, city, STATUS, TestLocalDate, TestLocalDateTime from CUSTOMERS");
+
+        log.info(list);
+        assertEquals("list should be 1", 1, list.size());
+
+        Customer c2 = list.get(0);
+        assertEquals("region s/b north ", Regions.North, c2.getRegion());
+    }
+
+    public void testReadPrimitive() throws SQLException {
+
+        Customer customer = new Customer();
+        customer.setCompanyName("TEST");
+        customer.setCustomerId("MOO");
+        customer.setAddress("123 sesame street");
+        customer.setCity("city");
+        customer.setContactName("fred flintstone");
+        customer.setContactTitle("Lord");
+        customer.setCountry("US");
+        customer.setDateRegistered(new Timestamp(System.currentTimeMillis()));
+        customer.setFax("123-456-7890");
+        customer.setPhone("456-678-1234");
+        customer.setPostalCode("54321");
+        customer.setRegion(Regions.East);
+        customer.setStatus('2');
+
+
+        session.delete(customer); // in case it already exists.
+        session.insert(customer);
+
+        List<String> list = session.query(String.class, "SELECT Country from CUSTOMERS");
+
+
+        Order order;
+        order = DAOFactory.newOrder(con);
+        order.setCustomerId("MOO");
+        order.setName("ORDER 1");
+        //order.setCreated(new java.sql.Date(System.currentTimeMillis()));
+        order.setPaid(true);
+        session.insert(order);
+
+        assertTrue("order # > 0", order.getId() > 0);
+        assertNotNull("order created date should be defaulted", order.getCreated());
+
+
+        assertEquals("list should have 1", 1, list.size());
+        assertEquals("String should be US", "US", list.get(0));
+
+        String countryString = session.fetch(String.class, "SELECT Country from CUSTOMERS");
+        assertEquals("String should be US", "US", countryString);
+
+        countryString = "NOT US";
+        countryString = session.fetch(String.class, "SELECT Country from CUSTOMERS");
+        assertEquals("String should be US", "US", countryString);
+
+        List<Date> dates = session.query(Date.class, "select Date_Registered from Customers ");
+        log.info(dates);
+
+        Date dt = session.fetch(Date.class, "select Date_Registered from Customers ");
+        log.info(dt);
+
+        // Fails because there is no way to instantiate java.sql.Date - no default constructor.
+        List<java.sql.Date> sdates = session.query(java.sql.Date.class, "select Date_Registered from Customers ");
+        log.info(sdates);
+
+        java.sql.Date sdt = session.fetch(java.sql.Date.class, "select Date_Registered from Customers ");
+        log.info(sdt);
+
+        // this should fail. We can't do simple read on a primitive
+        boolean failed = false;
+        try {
+            session.fetch(countryString);
+        } catch (PersismException e) {
+            failed = true;
+            assertEquals("message s/b 'Cannot read a primitive type object with this method.'", "Cannot read a primitive type object with this method.", e.getMessage());
+        }
+        assertTrue("should have thrown the exception", failed);
+
+    }
 
     public void testAllDates() {
         SQLDateTypesTests();
@@ -606,14 +607,14 @@ public abstract class BaseTest extends TestCase {
         for (String column : changedProperties.keySet()) {
 
             if (!primaryKeys.contains(column)) {
-                Object value = allProperties.get(column).getter.invoke(contact);
+                Object value = allProperties.get(column).getGetter().invoke(contact);
 
                 params.add(value);
             }
         }
 
         for (String column : primaryKeys) {
-            params.add(allProperties.get(column).getter.invoke(contact));
+            params.add(allProperties.get(column).getGetter().invoke(contact));
         }
 
         log.info(updateSQL);

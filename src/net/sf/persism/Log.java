@@ -26,17 +26,17 @@ import java.util.concurrent.ConcurrentHashMap;
  * @author Dan Howard
  * @since 4/21/12 6:47 AM
  */
-final class Log {
+public final class Log {
 
-    private AbstractLogger logger;
+	private AbstractLogger logger;
 
-    private static final Map<String, Log> loggers = new ConcurrentHashMap<String, Log>(12);
+	private static final Map<String, Log> loggers = new ConcurrentHashMap<String, Log>(12);
 
-    private Log() {
-    }
+	private Log() {
+	}
 
-    public Log(String logName) {
-        try {
+	public Log(String logName) {
+		try {
             Class.forName("org.slf4j.Logger");
             logger = new Slf4jLogger(logName);
         } catch (ClassNotFoundException e) {

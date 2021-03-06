@@ -2,7 +2,7 @@ package net.sf.persism;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
-import java.util.HashMap;
+import java.util.Collections;
 import java.util.Map;
 
 /**
@@ -11,25 +11,48 @@ import java.util.Map;
  * Date: 9/8/11
  * Time: 8:09 AM
  */
-final class PropertyInfo {
+public final class PropertyInfo {
 
-    String propertyName;
-    Method getter;
-    Method setter;
+    private final String propertyName;
+    private final Method getter;
+    private final Method setter;
 
-    Map<Class<? extends Annotation>, Annotation> annotations = new HashMap<Class<? extends Annotation>, Annotation>(4);
+    private final Map<Class<? extends Annotation>, Annotation> annotations;
 
-    Annotation getAnnotation(Class<? extends  Annotation> annotationClass) {
-        return annotations.get(annotationClass);
+    public PropertyInfo(String propertyName, Method getter, Method setter, Map<Class<? extends Annotation>, Annotation> annotations) {
+        this.propertyName = propertyName;
+        this.getter = getter;
+        this.setter = setter;
+        this.annotations = Collections.unmodifiableMap(annotations);
+    }
+
+    public String getPropertyName() {
+        return propertyName;
+    }
+
+    public Method getGetter() {
+        return getter;
+    }
+
+    public Method getSetter() {
+        return setter;
+    }
+
+    public <T extends Annotation> T getAnnotation(Class<T> annotationClass) {
+        return (T) annotations.get(annotationClass);
+    }
+
+    public Map<Class<? extends Annotation>, Annotation> getAnnotations() {
+        return annotations;
     }
 
     @Override
     public String toString() {
         return "PropertyInfo{" +
-                "propertyName='" + propertyName + '\'' +
-                ", getter=" + getter +
-                ", setter=" + setter +
-                ", annotations=" + annotations +
-                '}';
+            "propertyName='" + propertyName + '\'' +
+            ", getter=" + getter +
+            ", setter=" + setter +
+            ", annotations=" + annotations +
+            '}';
     }
 }

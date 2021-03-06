@@ -2,7 +2,10 @@ package net.sf.persism;
 
 import net.sf.persism.annotations.NotTable;
 
-import java.io.*;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.StringWriter;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.math.BigDecimal;
@@ -11,9 +14,12 @@ import java.sql.*;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
-import java.time.*;
-import java.util.*;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.Date;
+import java.util.*;
 
 /**
  * Performs various read and write operations in the database.
@@ -25,7 +31,7 @@ public final class Session implements AutoCloseable {
 
     private static final Log log = Log.getLogger(Session.class);
 
-    private Connection connection;
+    private final Connection connection;
 
     private MetaData metaData;
 
@@ -108,13 +114,13 @@ public final class Session implements AutoCloseable {
                 ColumnInfo columnInfo = columns.get(column);
 
                 if (!primaryKeys.contains(column)) {
-                    Object value = allProperties.get(column).getter.invoke(object);
+                    Object value = allProperties.get(column).getGetter().invoke(object);
 
                     if (value instanceof String) {
                         // check width
                         String str = (String) value;
-                        if (str.length() > columnInfo.length) {
-                            str = str.substring(0, columnInfo.length);
+                        if (str.length() > columnInfo.getLength()) {
+                            str = str.substring(0, columnInfo.getLength());
                             log.warn("TRUNCATION with Column: " + column + " for table: " + metaData.getTableName(object.getClass()) + ". Old value: \"" + value + "\" New value: \"" + str + "\"");
                             value = str;
                         }
@@ -125,13 +131,13 @@ public final class Session implements AutoCloseable {
             }
 
             for (String column : primaryKeys) {
-                params.add(allProperties.get(column).getter.invoke(object));
+                params.add(allProperties.get(column).getGetter().invoke(object));
                 columnInfos.add(metaData.getColumns(object.getClass(), connection).get(column));
             }
             assert params.size() == columnInfos.size();
             for (int j = 0; j < params.size(); j++) {
                 if (params.get(j) != null) {
-                    params.set(j, convert(params.get(j), columnInfos.get(j).columnType.getJavaType(), columnInfos.get(j).columnName));
+                    params.set(j, convert(params.get(j), columnInfos.get(j).getColumnType().getJavaType(), columnInfos.get(j).getColumnName()));
                 }
             }
             setParameters(st, params.toArray());
@@ -173,10 +179,10 @@ public final class Session implements AutoCloseable {
 
             List<String> generatedKeys = new ArrayList<>(1);
             for (ColumnInfo column : columns.values()) {
-                if (column.autoIncrement) {
-                    generatedKeys.add(column.columnName);
-                } else if (metaData.connectionType == ConnectionTypes.PostgreSQL && column.primary && column.hasDefault) {
-                    generatedKeys.add(column.columnName);
+                if (column.isAutoIncrement()) {
+                    generatedKeys.add(column.getColumnName());
+                } else if (metaData.connectionType == ConnectionTypes.PostgreSQL && column.isPrimary() && column.isHasDefault()) {
+                    generatedKeys.add(column.getColumnName());
                 }
             }
 
@@ -194,21 +200,21 @@ public final class Session implements AutoCloseable {
 
             for (ColumnInfo columnInfo : columns.values()) {
 
-                PropertyInfo propertyInfo = properties.get(columnInfo.columnName);
-                if (!columnInfo.autoIncrement) {
+                PropertyInfo propertyInfo = properties.get(columnInfo.getColumnName());
+                if (!columnInfo.isAutoIncrement()) {
 
-                    if (columnInfo.hasDefault) {
+                    if (columnInfo.isHasDefault()) {
                         // Do not include if this column has a default and no value has been
                         // set on it's associated property.
 
-                        if (propertyInfo.getter.getReturnType().isPrimitive()) {
-                            warnNoDuplicates("Property " + propertyInfo.propertyName + " for column " + columnInfo.columnName + " for class " + object.getClass() +
-                                    " should be an Object type to properly detect NULL for defaults (change it from the primitive type to its Boxed version).");
+                        if (propertyInfo.getGetter().getReturnType().isPrimitive()) {
+                            warnNoDuplicates("Property " + propertyInfo.getPropertyName() + " for column " + columnInfo.getColumnName() + " for class " + object.getClass() +
+                                " should be an Object type to properly detect NULL for defaults (change it from the primitive type to its Boxed version).");
                         }
 
-                        if (propertyInfo.getter.invoke(object) == null) {
+                        if (propertyInfo.getGetter().invoke(object) == null) {
 
-                            if (columnInfo.primary) {
+                            if (columnInfo.isPrimary()) {
                                 // This is supported with PostgreSQL but otherwise throw this an exception
                                 if (!(metaData.connectionType == ConnectionTypes.PostgreSQL)) {
                                     throw new PersismException("Non-auto inc generated primary keys are not supported. Please assign your primary key value before performing an insert.");
@@ -220,14 +226,14 @@ public final class Session implements AutoCloseable {
                         }
                     }
 
-                    Object value = propertyInfo.getter.invoke(object);
+                    Object value = propertyInfo.getGetter().invoke(object);
 
                     if (value instanceof String) {
                         // check width
                         String str = (String) value;
-                        if (str.length() > columnInfo.length) {
-                            str = str.substring(0, columnInfo.length);
-                            log.warn("TRUNCATION with Column: " + columnInfo.columnName + " for table: " + metaData.getTableName(object.getClass()) + ". Old value: \"" + value + "\" New value: \"" + str + "\"");
+                        if (str.length() > columnInfo.getLength()) {
+                            str = str.substring(0, columnInfo.getLength());
+                            log.warn("TRUNCATION with Column: " + columnInfo.getColumnName() + " for table: " + metaData.getTableName(object.getClass()) + ". Old value: \"" + value + "\" New value: \"" + str + "\"");
                             value = str;
                         }
                     }
@@ -242,7 +248,7 @@ public final class Session implements AutoCloseable {
             assert params.size() == columnInfos.size();
             for (int j = 0; j < params.size(); j++) {
                 if (params.get(j) != null) {
-                    params.set(j, convert(params.get(j), columnInfos.get(j).columnType.getJavaType(), columnInfos.get(j).columnName));
+                    params.set(j, convert(params.get(j), columnInfos.get(j).getColumnType().getJavaType(), columnInfos.get(j).getColumnName()));
                 }
             }
 
@@ -257,7 +263,7 @@ public final class Session implements AutoCloseable {
                 for (String column : generatedKeys) {
                     if (rs.next()) {
 
-                        Method setter = properties.get(column).setter;
+                        Method setter = properties.get(column).getSetter();
                         Object value = getTypedValueReturnedFromGeneratedKeys(setter.getParameterTypes()[0], rs);
 
                         if (log.isDebugEnabled()) {
@@ -313,13 +319,13 @@ public final class Session implements AutoCloseable {
             List<Object> params = new ArrayList<>(primaryKeys.size());
             List<ColumnInfo> columnInfos = new ArrayList<>(primaryKeys.size());
             for (String column : primaryKeys) {
-                params.add(columns.get(column).getter.invoke(object));
+                params.add(columns.get(column).getGetter().invoke(object));
                 columnInfos.add(metaData.getColumns(object.getClass(), connection).get(column));
             }
 
             for (int j = 0; j < params.size(); j++) {
                 if (params.get(j) != null) {
-                    params.set(j, convert(params.get(j), columnInfos.get(j).columnType.getJavaType(), columnInfos.get(j).columnName));
+                    params.set(j, convert(params.get(j), columnInfos.get(j).getColumnType().getJavaType(), columnInfos.get(j).getColumnName()));
                 }
             }
             setParameters(st, params.toArray());
@@ -442,7 +448,7 @@ public final class Session implements AutoCloseable {
         try {
             for (String column : primaryKeys) {
                 PropertyInfo propertyInfo = properties.get(column);
-                params.add(propertyInfo.getter.invoke(object));
+                params.add(propertyInfo.getGetter().invoke(object));
                 columnInfos.add(cols.get(column));
             }
             assert params.size() == columnInfos.size();
@@ -453,7 +459,7 @@ public final class Session implements AutoCloseable {
             }
             for (int j = 0; j < params.size(); j++) {
                 if (params.get(j) != null) {
-                    params.set(j, convert(params.get(j), columnInfos.get(j).columnType.getJavaType(), columnInfos.get(j).columnName));
+                    params.set(j, convert(params.get(j), columnInfos.get(j).getColumnType().getJavaType(), columnInfos.get(j).getColumnName()));
                 }
             }
             exec(result, sql, params.toArray());
@@ -588,7 +594,7 @@ public final class Session implements AutoCloseable {
             StringBuilder sb = new StringBuilder();
             String sep = "";
             for (PropertyInfo prop : missing) {
-                sb.append(sep).append(prop.propertyName);
+                sb.append(sep).append(prop.getPropertyName());
                 sep = ",";
             }
 
@@ -605,7 +611,7 @@ public final class Session implements AutoCloseable {
             PropertyInfo columnProperty = properties.get(columnName);
 
             if (columnProperty != null) {
-                Class<?> returnType = columnProperty.getter.getReturnType();
+                Class<?> returnType = columnProperty.getGetter().getReturnType();
 
                 Object value = readColumn(rs, j, returnType);
 
@@ -613,7 +619,7 @@ public final class Session implements AutoCloseable {
 
                 if (value != null) {
                     try {
-                        columnProperty.setter.invoke(object, value);
+                        columnProperty.getSetter().invoke(object, value);
                     } catch (IllegalArgumentException e) {
                         String msg = "Object " + objectClass + ". Column: " + columnName + " Type of property: " + returnType + " - Type read: " + value.getClass() + " VALUE: " + value;
                         throw new PersismException(msg, e);
@@ -806,7 +812,7 @@ public final class Session implements AutoCloseable {
             case IntegerType:
                 // int to bool
                 if (targetType.equals(Boolean.class) || targetType.equals(boolean.class)) {
-                    returnValue = Integer.valueOf("" + value) == 0 ? false : true;
+                    returnValue = Integer.valueOf("" + value) != 0;
 
                 } else if (targetType.equals(Time.class)) {
                     // SQLite when a Time is defined VIA a convert from LocalTime via Time.valueOf (see getContactForTest)
@@ -896,7 +902,7 @@ public final class Session implements AutoCloseable {
                     warnNoDuplicates("Possible overflow column " + columnName + " - Property is Boolean and column is BigDecimal - seems a bit overkill?");
 
                 } else if (targetType.equals(String.class)) {
-                    returnValue = (value).toString();
+                    returnValue = value.toString();
                 }
                 break;
 
